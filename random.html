@@ -232,132 +232,202 @@
         };
 
         const Ladder = () => {
-            const canvasRef = useRef(null);
-            const [participants, setParticipants] = useState('');
-            const [results, setResults] = useState('');
-            const [ladderLines, setLadderLines] = useState([]);
-            const [ladderResults, setLadderResults] = useState([]);
+    const canvasRef = useRef(null);
+    const [participants, setParticipants] = useState('');
+    const [results, setResults] = useState('');
+    const [ladderLines, setLadderLines] = useState([]);
+    const [ladderResults, setLadderResults] = useState([]);
+    const [isAddingLine, setIsAddingLine] = useState(false);
 
-            const drawLadderCanvas = (parts, res, lines) => {
-                const canvas = canvasRef.current;
-                const ctx = canvas.getContext('2d');
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const drawLadderCanvas = (parts, res) => {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-                const step = 300 / (parts.length + 1);
-                for (let i = 1; i <= parts.length; i++) {
-                    ctx.beginPath();
-                    ctx.moveTo(i * step, 50);
-                    ctx.lineTo(i * step, 250);
-                    ctx.strokeStyle = '#1F2937';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                    ctx.fillStyle = '#1F2937';
-                    ctx.font = '14px HancomMalangMalang-Regular';
-                    ctx.fillText(parts[i - 1], i * step - 20, 40);
-                    ctx.fillText(res[i - 1], i * step - 20, 270);
+        const step = 300 / (parts.length + 1);
+        for (let i = 1; i <= parts.length; i++) {
+            ctx.beginPath();
+            ctx.moveTo(i * step, 50);
+            ctx.lineTo(i * step, 250);
+            ctx.strokeStyle = '#1F2937';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = '#1F2937';
+            ctx.font = '14px HancomMalangMalang-Regular';
+            ctx.fillText(parts[i - 1], i * step - 20, 40);
+            ctx.fillText(res[i - 1], i * step - 20, 270);
+        }
+
+        ladderLines.forEach(line => {
+            ctx.beginPath();
+            ctx.moveTo(line.col * step, line.y);
+            ctx.lineTo((line.col + 1) * step, line.y);
+            ctx.strokeStyle = '#EF4444';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        });
+    };
+
+    const addLadderLine = () => {
+        const parts = participants.split(',').map(p => p.trim()).filter(p => p);
+        if (parts.length < 2) {
+            alert('최소 2명의 참가자를 입력해주세요!');
+            return;
+        }
+        setIsAddingLine(true);
+    };
+
+    const handleCanvasClick = (e) => {
+        if (!isAddingLine) return;
+        const parts = participants.split(',').map(p => p.trim()).filter(p => p);
+        const canvas = canvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        const step = 300 / (parts.length + 1);
+        const col = Math.round(x / step);
+        if (col >= 1 && col < parts.length && y > 50 && y < 250) {
+            const lineY = Math.round((y - 50) / 50) * 50 + 50;
+            setLadderLines(prev => {
+                const newLines = [...prev, { col, y: lineY }];
+                drawLadderCanvas(parts, results.split(',').map(r => r.trim()).filter(r => r));
+                return newLines;
+            });
+            setIsAddingLine(false);
+        }
+    };
+
+    const calculateLadderResults = (parts, res, lines) => {
+        const step = 300 / (parts.length + 1);
+        const finalResults = [];
+
+        // 각 참가자에 대해 경로 추적
+        for (let i = 0; i < parts.length; i++) {
+            let currentCol = i + 1; // 시작 열 (1-based)
+            let currentY = 50; // 시작 y 위치
+
+            // y=50에서 y=250까지 경로를 따라감
+            while (currentY < 250) {
+                // 현재 열과 y 위치에 해당하는 가로선 찾기
+                const line = lines.find(l => l.col === currentCol && Math.abs(l.y - currentY) < 25) ||
+                            lines.find(l => l.col === currentCol - 1 && Math.abs(l.y - currentY) < 25);
+
+                if (line) {
+                    // 가로선을 만나면 이동
+                    if (line.col === currentCol) {
+                        currentCol -= 1; // 왼쪽으로 이동
+                    } else if (line.col === currentCol - 1) {
+                        currentCol += 1; // 오른쪽으로 이동
+                    }
+                    currentY = line.y + 1; // 가로선을 지난 후 약간 아래로 이동
+                } else {
+                    // 가로선이 없으면 아래로 이동
+                    currentY += 25;
                 }
+            }
 
-                lines.forEach(line => {
-                    ctx.beginPath();
-                    ctx.moveTo(line.col * step, line.y);
-                    ctx.lineTo((line.col + 1) * step, line.y);
-                    ctx.strokeStyle = '#EF4444';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                });
-            };
+            // 최종 열에 해당하는 결과 매핑
+            finalResults.push({
+                participant: parts[i],
+                result: res[currentCol - 1]
+            });
+        }
 
-            const generateLadderLines = (numParticipants) => {
-                const lines = [];
-                const stepY = 200 / (numParticipants - 1); // Distribute lines across the ladder height
-                for (let col = 1; col < numParticipants; col++) {
-                    const y = 50 + Math.floor(Math.random() * (numParticipants - 1)) * stepY + stepY / 2;
-                    lines.push({ col, y: Math.min(Math.max(y, 50), 250) });
-                }
-                return lines;
-            };
+        return finalResults;
+    };
 
-            const calculateLadderResults = (parts, res, lines) => {
-                const paths = Array.from({ length: parts.length }, (_, i) => i + 1);
-                lines.forEach(line => {
-                    const col = line.col;
-                    const idx1 = paths.findIndex(p => p === col);
-                    const idx2 = paths.findIndex(p => p === col + 1);
-                    if (idx1 !== -1 && idx2 !== -1) {
-                        [paths[idx1], paths[idx2]] = [paths[idx2], paths[idx1]];
+    const startLadder = () => {
+        const parts = participants.split(',').map(p => p.trim()).filter(p => p);
+        const res = results.split(',').map(r => r.trim()).filter(r => r);
+        if (parts.length < 2 || res.length !== parts.length) {
+            alert('참가자와 결과는 같은 수로 입력해주세요!');
+            return;
+        }
+
+        const finalResults = calculateLadderResults(parts, res, ladderLines);
+        setLadderResults(finalResults);
+    };
+
+    useEffect(() => {
+        const loadFonts = async () => {
+            const font1 = new FontFace('Cafe24Nyangi-W-v1.0', 'url(https://fastly.jsdelivr.net/gh/projectnoonnu/2410-1@1.0/Cafe24Nyangi-W-v1.0.woff2)');
+            const font2 = new FontFace('HancomMalangMalang-Regular', 'url(https://fastly.jsdelivr.net/gh/projectnoonnu/2406-1@1.0/HancomMalangMalang-Regular.woff2)');
+            await Promise.all([font1.load(), font2.load()]).then(loadedFonts => {
+                loadedFonts.forEach(font => document.fonts.add(font));
+                document.fonts.ready.then(() => {
+                    const parts = participants.split(',').map(p => p.trim()).filter(p => p);
+                    const res = results.split(',').map(r => r.trim()).filter(r => r);
+                    if (parts.length >= 2 && parts.length === res.length) {
+                        drawLadderCanvas(parts, res);
+                    } else {
+                        setLadderLines([]);
+                        setLadderResults([]);
+                        if (canvasRef.current) {
+                            const ctx = canvasRef.current.getContext('2d');
+                            ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+                        }
                     }
                 });
-
-                const finalResults = paths.map((end, i) => ({
-                    participant: parts[i],
-                    result: res[end - 1]
-                }));
-                return finalResults;
-            };
-
-            useEffect(() => {
-                const loadFonts = async () => {
-                    const font1 = new FontFace('Cafe24Nyangi-W-v1.0', 'url(https://fastly.jsdelivr.net/gh/projectnoonnu/2410-1@1.0/Cafe24Nyangi-W-v1.0.woff2)');
-                    const font2 = new FontFace('HancomMalangMalang-Regular', 'url(https://fastly.jsdelivr.net/gh/projectnoonnu/2406-1@1.0/HancomMalangMalang-Regular.woff2)');
-                    await Promise.all([font1.load(), font2.load()]).then(loadedFonts => {
-                        loadedFonts.forEach(font => document.fonts.add(font));
-                        document.fonts.ready.then(() => {
-                            const parts = participants.split(',').map(p => p.trim()).filter(p => p);
-                            const res = results.split(',').map(r => r.trim()).filter(r => r);
-                            if (parts.length >= 2 && parts.length === res.length) {
-                                const lines = generateLadderLines(parts.length);
-                                setLadderLines(lines);
-                                drawLadderCanvas(parts, res, lines);
-                                const finalResults = calculateLadderResults(parts, res, lines);
-                                setLadderResults(finalResults);
-                            } else {
-                                setLadderLines([]);
-                                setLadderResults([]);
-                                if (canvasRef.current) {
-                                    const ctx = canvasRef.current.getContext('2d');
-                                    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-                                }
-                            }
-                        });
-                    });
-                };
-                loadFonts();
-            }, [participants, results]);
-
-            return (
-                <div className="card p-8 max-w-3xl mx-auto mb-12 fade-in">
-                    <h3 className="text-xl font-semibold text-gray-800 mb-4">사다리타기</h3>
-                    <input
-                        type="text"
-                        value={participants}
-                        onChange={(e) => setParticipants(e.target.value)}
-                        placeholder="참가자 입력 (쉼표로 구분, 예: 철수,영희,민수)"
-                        className="w-full p-3 border rounded-lg mb-2 focus:outline-none focus:ring-2 focus:ring-pink-400"
-                    />
-                    <input
-                        type="text"
-                        value={results}
-                        onChange={(e) => setResults(e.target.value)}
-                        placeholder="결과 입력 (쉼표로 구분, 예: 짜장면,짬뽕,탕수육)"
-                        className="w-full p-3 border rounded-lg mb-2 focus:outline-none focus:ring-2 focus:ring-pink-400"
-                    />
-                    <p className="tool-description">참가자와 결과를 입력하면 사다리가 자동으로 생성됩니다.</p>
-                    <canvas ref={canvasRef} width="300" height="300" className="mx-auto mb-4" style={{ width: '300px', height: '300px' }}></canvas>
-                    <div className="text-center text-lg font-semibold text-gray-800 mb-4">
-                        {ladderResults.length > 0 ? (
-                            <div>
-                                <h4 className="font-semibold">결과:</h4>
-                                {ladderResults.map((res, index) => (
-                                    <div key={index}>{`${res.participant} → ${res.result}`}</div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div>참가자와 결과를 입력해주세요.</div>
-                        )}
-                    </div>
-                </div>
-            );
+            });
         };
+        loadFonts();
+    }, [participants, results, ladderLines]);
+
+    return (
+        <div className="card p-8 max-w-3xl mx-auto mb-12 fade-in">
+            <h3 className="text-xl font-semibold text-gray-800 mb-4">사다리타기</h3>
+            <input
+                type="text"
+                value={participants}
+                onChange={(e) => setParticipants(e.target.value)}
+                placeholder="참가자 입력 (쉼표로 구분, 예: 철수,영희,민수)"
+                className="w-full p-3 border rounded-lg mb-2 focus:outline-none focus:ring-2 focus:ring-pink-400"
+            />
+            <input
+                type="text"
+                value={results}
+                onChange={(e) => setResults(e.target.value)}
+                placeholder="결과 입력 (쉼표로 구분, 예: 짜장면,짬뽕,탕수육)"
+                className="w-full p-3 border rounded-lg mb-2 focus:outline-none focus:ring-2 focus:ring-pink-400"
+            />
+            <p className="tool-description">참가자와 결과를 입력하고 가로선을 추가해 결과를 배정하세요.</p>
+            <canvas
+                ref={canvasRef}
+                width="300"
+                height="300"
+                className="mx-auto mb-4"
+                style={{ width: '300px', height: '300px' }}
+                onClick={handleCanvasClick}
+            ></canvas>
+            <div className="flex justify-center mb-4">
+                <button
+                    onClick={addLadderLine}
+                    className="bg-gray-500 text-white px-6 py-3 rounded-lg font-semibold btn-hover mr-2"
+                >
+                    {isAddingLine ? '가로선 위치 선택 중...' : '가로선 추가'}
+                </button>
+                <button
+                    onClick={startLadder}
+                    className="bg-pink-600 text-white px-6 py-3 rounded-lg font-semibold btn-hover"
+                >
+                    사다리 시작
+                </button>
+            </div>
+            <div className="text-center text-lg font-semibold text-gray-800 mb-4">
+                {ladderResults.length > 0 ? (
+                    <div>
+                        <h4 className="font-semibold">결과:</h4>
+                        {ladderResults.map((res, index) => (
+                            <div key={index}>{`${res.participant} → ${res.result}`}</div>
+                        ))}
+                    </div>
+                ) : (
+                    <div>참가자와 결과를 입력하고 사다리를 시작하세요.</div>
+                )}
+            </div>
+        </div>
+    );
+};
 
         const Race = () => {
             const [options, setOptions] = useState('');
